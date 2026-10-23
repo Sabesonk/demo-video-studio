@@ -1,0 +1,73 @@
+{
+  "chunks": [
+    {
+      "text": "[Intro]\nSoft, airy piano notes over warm pads, slowly opening up, calm and welcoming",
+      "durationMs": 13850,
+      "positiveStyles": [
+        "instrumental",
+        "modern corporate technology",
+        "ambient electronic",
+        "soft piano",
+        "warm synth pads",
+        "optimistic",
+        "clean modern production"
+      ],
+      "negativeStyles": [
+        "vocals",
+        "lyrics",
+        "singing",
+        "choir",
+        "heavy drums",
+        "distorted guitar",
+        "aggressive",
+        "dramatic orchestral hits",
+        "dark"
+      ],
+      "contextAdherence": "high"
+    },
+    {
+      "text": "[Main theme]\nA gentle pulsing synth and a soft kick join the piano, steady and confident",
+      "durationMs": 42630,
+      "positiveStyles": [
+        "gentle pulsing synth",
+        "soft kick",
+        "steady tempo around 95 bpm",
+        "warm pads"
+      ],
+      "negativeStyles": [
+        "vocals",
+        "lyrics",
+        "singing",
+        "choir",
+        "heavy drums",
+        "distorted guitar",
+        "aggressive",
+        "dramatic orchestral hits",
+        "dark"
+      ],
+      "contextAdherence": "high"
+    },
+    {
+      "text": "[Theme continues]\nWarm and reflective, a light plucked arpeggio weaves around the piano",
+      "durationMs": 51030,
+      "positiveStyles": [
+        "plucked synth arpeggio",
+        "soft piano",
+        "reflective",
+        "steady"
+      ],
+      "negativeStyles": [
+        "vocals",
+        "lyrics",
+        "singing",
+        "choir",
+        "heavy drums",
+        "distorted guitar",
+        "aggressive",
+        "dramatic orchestral hits",
+        "dark"
+      ],
+      "contextAdherence": "high"
+    }
+  ]
+}

@@ -1,0 +1,726 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Product tour</title>
+<style>
+/* One 1920x1080 stage. Real screenshots sit in a framed app window on a branded backdrop
+   (canvas); captions, chapter bumpers and the title and end cards are DOM layers above it.
+   Everything on screen is a pure function of time: renderAt(t). Colours come from tour.js. */
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--ground); color: var(--ink); font-family: var(--font);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+  padding: 16px max(16px, env(safe-area-inset-right, 0px)) 16px max(16px, env(safe-area-inset-left, 0px));
+  overflow: hidden;
+}
+#frame { position: relative; flex: none; border-radius: 12px; overflow: hidden; box-shadow: 0 24px 70px rgba(0,0,0,.18); border: 1px solid var(--line); }
+#stage { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; transform-origin: 0 0; overflow: hidden; background: var(--backdrop); }
+#screen { position: absolute; inset: 0; }
+
+#caption { position: absolute; left: 50%; bottom: 52px; max-width: 1400px; width: max-content; transform: translateX(-50%);
+  background: color-mix(in srgb, var(--surface) 96%, transparent); border: 1px solid var(--line); border-radius: 18px;
+  padding: 20px 36px 24px; box-shadow: 0 18px 50px rgba(0,0,0,.18);
+  opacity: 0; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+#caption .area { display: flex; align-items: center; gap: 10px; font-size: 19px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--accent-strong); }
+#caption .area::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); }
+#caption .text { font-size: 38px; font-weight: 600; line-height: 1.22; letter-spacing: -.012em; color: var(--ink); text-wrap: balance; }
+#caption.no-area .area { display: none; }
+
+#bumper { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; pointer-events: none; }
+#bumper .num { display: flex; align-items: center; gap: 16px; font-size: 26px; font-weight: 700; letter-spacing: .14em; color: var(--accent-strong); font-variant-numeric: tabular-nums; }
+#bumper .num::after { content: ""; width: 64px; height: 3px; border-radius: 2px; background: var(--accent); }
+#bumper .title { margin-top: 22px; font-size: 112px; line-height: 1; font-weight: 800; letter-spacing: -.045em; color: var(--primary); }
+#bumper .sub { margin-top: 26px; font-size: 38px; font-weight: 500; color: var(--muted); letter-spacing: -.01em; }
+#bumper > * { opacity: 0; }
+
+#progress { position: absolute; left: 0; right: 0; bottom: 0; height: 6px; display: flex; gap: 4px; padding: 0 4px; pointer-events: none; }
+#progress span { background: color-mix(in srgb, var(--muted) 16%, transparent); border-radius: 3px; overflow: hidden; }
+#progress span i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--accent), var(--secondary)); }
+
+.card { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;
+  background:
+    radial-gradient(900px 620px at 15% 10%, color-mix(in srgb, var(--accent) 13%, transparent), transparent 70%),
+    radial-gradient(860px 600px at 90% 95%, color-mix(in srgb, var(--secondary) 11%, transparent), transparent 70%),
+    radial-gradient(circle, color-mix(in srgb, var(--muted) 16%, transparent) 1.4px, transparent 1.6px) 0 0 / 28px 28px,
+    var(--backdrop);
+  opacity: 0; }
+.card .logo { height: 92px; width: auto; }
+.card .name { margin-top: 30px; font-size: 168px; line-height: .95; font-weight: 800; letter-spacing: -.05em; color: var(--primary); }
+.card .line { margin-top: 30px; font-size: 42px; font-weight: 500; color: var(--muted); letter-spacing: -.01em; }
+.card .tag { margin-top: 26px; font-size: 104px; line-height: 1.02; font-weight: 800; letter-spacing: -.045em; color: var(--primary); }
+.card .tag em { font-style: normal; color: var(--accent-strong); }
+.recap { list-style: none; margin: 44px 0 0; padding: 0; display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; max-width: 1600px; }
+.recap li { padding: 12px 22px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line); font-size: 25px; font-weight: 600; color: var(--ink); box-shadow: 0 6px 16px rgba(0,0,0,.06); }
+.card .link { margin-top: 40px; font-size: 32px; font-weight: 600; color: var(--accent-strong); }
+.card .credits { position: absolute; left: 50%; bottom: 46px; transform: translateX(-50%); width: max-content; max-width: 1700px; font-size: 19px; font-weight: 500; color: var(--muted); text-align: center; }
+
+#play-overlay { position: absolute; inset: 0; display: grid; place-items: center; background: color-mix(in srgb, var(--backdrop) 20%, transparent); border: 0; cursor: pointer; padding: 0; }
+#play-overlay .disc { width: 168px; height: 168px; border-radius: 50%; background: var(--accent); display: grid; place-items: center; box-shadow: 0 20px 60px color-mix(in srgb, var(--accent) 40%, transparent); }
+#play-overlay svg { width: 64px; height: 64px; margin-inline-start: 10px; fill: var(--on-accent); }
+#play-overlay:focus-visible .disc { outline: 4px solid var(--primary); outline-offset: 6px; }
+
+#controls { width: var(--frame-w, 960px); max-width: 100%; display: grid; grid-template-columns: auto auto 1fr; align-items: center; gap: 14px; }
+.btn { font: inherit; display: inline-flex; align-items: center; justify-content: center; height: 40px; padding: 0 16px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font-size: 14px; font-weight: 600; cursor: pointer; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); min-width: 92px; }
+.btn:focus-visible, #scrub:focus-visible, .chap:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+#time { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+#scrub { height: 40px; display: flex; gap: 4px; align-items: center; cursor: pointer; touch-action: none; min-width: 0; }
+#scrub .seg { position: relative; flex: var(--len) 1 0; height: 8px; border-radius: 4px; background: color-mix(in srgb, var(--muted) 18%, transparent); overflow: hidden; }
+#scrub .seg i { position: absolute; inset: 0 auto 0 0; width: 0; background: linear-gradient(90deg, var(--accent), var(--secondary)); }
+#chapters { width: var(--frame-w, 960px); max-width: 100%; display: flex; flex-wrap: wrap; gap: 8px; }
+.chap { border: 1px solid var(--line); background: var(--surface); color: var(--muted); border-radius: 999px; padding: 6px 12px; font: 500 13px var(--font); cursor: pointer; }
+.chap[aria-current="true"] { color: var(--accent-strong); border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+body.render { padding: 0; display: block; }
+body.render #frame { border: 0; border-radius: 0; box-shadow: none; }
+body.render #controls, body.render #chapters, body.render #play-overlay { display: none; }
+@media (max-width: 640px) { #controls { grid-template-columns: auto 1fr; } #time { grid-column: 1 / -1; order: 3; } }
+</style>
+<script src="tour.js"></script>
+<script src="img/manifest.js"></script>
+<script src="vo/vo-data.js"></script>
+</head>
+<body>
+<div id="frame" role="img">
+  <div id="stage">
+    <canvas id="screen" width="1920" height="1080"></canvas>
+    <div id="bumper"><div class="num"></div><div class="title"></div><div class="sub"></div></div>
+    <div id="caption"><div class="area"></div><div class="text"></div></div>
+    <div class="card" id="title-card"><img class="logo" alt=""><div class="name"></div><div class="line"></div></div>
+    <div class="card" id="end-card"><img class="logo" alt=""><div class="tag"></div><ul class="recap"></ul><div class="link"></div><div class="credits"></div></div>
+    <div id="progress"></div>
+    <button id="play-overlay" type="button" aria-label="Play"><span class="disc"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4l14 8-14 8z"/></svg></span></button>
+  </div>
+</div>
+<div id="controls">
+  <button class="btn primary" id="play" type="button" aria-label="Play">Play</button>
+  <span id="time">0:00</span>
+  <div id="scrub" role="slider" tabindex="0" aria-label="Seek" aria-valuemin="0" aria-valuenow="0"></div>
+</div>
+<nav id="chapters" aria-label="Chapters"></nav>
+<audio id="narration" preload="auto"></audio>
+
+<script>
+// ── configuration (tour.js) ──────────────────────────────────────────────────
+const CFG = window.TOUR || {};
+const W = 1920, H = 1080, WALL = 'WALL';
+const PALETTES = {
+  light: { accent: '#2563EB', accentStrong: '#1D4ED8', onAccent: '#FFFFFF', primary: '#0F172A', secondary: '#7C3AED', backdrop: '#F8FAFB',
+           ground: '#ECEFF3', surface: '#FFFFFF', line: '#E2E8F0', ink: '#0F172A', muted: '#475569', bar: '#F1F5F9' },
+  dark:  { accent: '#38BDF8', accentStrong: '#7DD3FC', onAccent: '#0B1120', primary: '#F8FAFC', secondary: '#A78BFA', backdrop: '#0B1120',
+           ground: '#020617', surface: '#0F172A', line: '#1E293B', ink: '#F1F5F9', muted: '#94A3B8', bar: '#1E293B' },
+};
+const brand = CFG.brand || {};
+const DARK = brand.theme === 'dark';
+const C = { ...PALETTES[DARK ? 'dark' : 'light'], ...(brand.colors || {}) };
+const FONT = brand.font || 'Inter';
+const rootStyle = document.documentElement.style;
+for (const [k, v] of Object.entries(C)) rootStyle.setProperty(`--${k.replace(/[A-Z]/g, m => `-${m.toLowerCase()}`)}`, v);
+rootStyle.setProperty('--font', `'${FONT}', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`);
+rootStyle.colorScheme = DARK ? 'dark' : 'light';
+if (!/^(system-ui|-apple-system|Helvetica|Arial|Segoe UI|sans-serif)$/i.test(FONT)) {
+  const l = document.createElement('link');
+  l.rel = 'stylesheet';
+  l.href = `https://fonts.googleapis.com/css2?family=${FONT.replace(/ /g, '+')}:wght@400;500;600;700;800&display=swap`;
+  document.head.appendChild(l);
+}
+document.title = CFG.title || 'Product tour';
+const rgba = (hex, a) => {
+  let h = hex.replace('#', ''); if (h.length === 3) h = h.split('').map(c => c + c).join('');
+  const n = parseInt(h, 16); return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+};
+
+// Timing (seconds). Beats last as long as their narration line plus `pad`, so the voice sets the pace.
+const T = { pad: .9, zin: .95, zout: .5, push: .9, chapter: 1.55, join: .4, through: .85, shutter: .3, home: .8, wps: 3.8, ...(CFG.timing || {}) };
+const VO = window.VO_DATA || {};
+const voDur = id => (VO[id] ? VO[id].dur : 0);
+const slug = s => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+const chapterInfo = ch => { const v = (CFG.chapters || {})[ch]; return typeof v === 'string' ? { sub: v } : (v || {}); };
+const HAS_TITLE = !!CFG.titleCard, HAS_END = !!CFG.endCard;
+const T0 = HAS_TITLE ? Math.max(3.0, .6 + voDur('title') + .7) : .6;
+const END_CARD = HAS_END ? Math.max(4.2, .45 + voDur('end') + 1.4) : 1.2;
+const BAR = 46, RADIUS = 22, HOME = [960, (H - BAR) / 2, T.home];
+
+// ── beats ────────────────────────────────────────────────────────────────────
+// Boxes and typed-text lines can be named: capture writes them to img/manifest.js.
+const SHOTS = window.SHOT_BOXES || {};
+const PROBLEMS = [];
+function boxOf(img, ref, what) {
+  if (Array.isArray(ref)) return ref;
+  const b = SHOTS[img] && SHOTS[img].boxes && SHOTS[img].boxes[ref];
+  if (!b) PROBLEMS.push(`beat "${img}": no box named "${ref}" for ${what} in img/manifest.js`);
+  return b || null;
+}
+const centre = b => [b[0] + b[2] / 2, b[1] + b[3] / 2];
+const isBox = f => Array.isArray(f) && f.length === 4 && f.every(n => typeof n === 'number');
+
+const BEATS = (CFG.beats || []).map((src, i) => {
+  const b = { ...src };
+  b.id = b.id || (b.img === WALL ? 'wall' : b.img);
+  if (i === 0) { b.join = false; b.through = false; }
+  b.focus = (b.focus || []).map(f => (typeof f === 'string' || isBox(f) ? [f, .5, 99] : f))
+    .map(([ref, a = .5, z = 99]) => [boxOf(b.img, ref, 'focus'), a, z]).filter(f => f[0]);
+  if (b.click) {
+    const k = { ...b.click };
+    k.to = typeof k.to === 'string' ? (boxOf(b.img, k.to, 'click') ? centre(boxOf(b.img, k.to, 'click')) : [W / 2, H / 2]) : k.to;
+    k.from = k.from || [Math.min(W - 60, k.to[0] + 300), Math.min(H - 60, k.to[1] + 240)];
+    k.move = k.move || [.25, 1.15];
+    k.at = k.at ?? k.move[1] + .12;
+    b.click = k;
+  }
+  b.type = (b.type || []).map(s => {
+    const m = s.text ? (SHOTS[b.img] && SHOTS[b.img].text && SHOTS[b.img].text[s.text]) : s;
+    if (!m || !m.lines) { PROBLEMS.push(`beat "${b.img}": no typed text "${s.text}" in img/manifest.js`); return null; }
+    const total = m.lines.reduce((a, l) => a + l[2], 0), charW = m.lines[0][3] * .5;
+    return { lines: m.lines, bg: s.bg || m.bg || C.surface, at: s.at ?? .3, dur: s.dur ?? Math.min(3, Math.max(.5, total / charW / 14)), charW };
+  }).filter(Boolean);
+  return b;
+});
+const IDS = new Set();
+for (const b of BEATS) { if (IDS.has(b.id)) PROBLEMS.push(`two beats share the id "${b.id}": give one an "id"`); IDS.add(b.id); }
+
+// A beat without `cam` frames its focus boxes (and click target) above the caption.
+function autoCam(b) {
+  const boxes = b.focus.map(f => f[0]);
+  if (b.click) boxes.push([b.click.to[0] - 30, b.click.to[1] - 30, 60, 60]);
+  if (!boxes.length) return [[W / 2, H / 2, 1.1], [W / 2, H / 2, 1.16]];
+  const x0 = Math.min(...boxes.map(r => r[0])), y0 = Math.min(...boxes.map(r => r[1]));
+  const x1 = Math.max(...boxes.map(r => r[0] + r[2])), y1 = Math.max(...boxes.map(r => r[1] + r[3]));
+  const s = Math.max(1, Math.min(1.7, W * .7 / (x1 - x0), (H - 300) * .75 / (y1 - y0)));
+  // A subject too low to clear a bottom caption (the camera stops at the image's edge) gets the caption on top.
+  if (b.capTop === undefined) {
+    const [, cyFit] = clampFull([(x0 + x1) / 2, (y0 + y1) / 2 + 150 / s * 1.06, s * 1.06]);
+    b.capTop = (y1 - cyFit) * s * 1.06 + H / 2 > H - 270;
+  }
+  const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2 + (b.capTop ? -150 : 150) / s;
+  return [[cx, cy, s], [cx, cy, s * 1.06]];
+}
+
+// ── timeline ─────────────────────────────────────────────────────────────────
+const autoDur = cap => cap ? Math.max(2.2, Math.round((cap.split(/\s+/).length / T.wps + .5) * 10) / 10) : 1.6;
+const SEGS = [];
+const VO_SCHEDULE = HAS_TITLE && VO.title ? [{ id: 'title', t: .6 }] : [];
+let clock = T0;
+BEATS.forEach((b, i) => {
+  const prev = BEATS[i - 1], next = BEATS[i + 1];
+  if (prev && prev.ch !== b.ch) b.through = false;
+  if (i > 0 && !b.join) {
+    const type = prev.ch !== b.ch ? 'chapter' : b.through ? 'through' : 'push';
+    const chId = `ch-${slug(b.ch || '')}`;
+    const d = type === 'chapter' ? Math.max(T.chapter, .4 + voDur(chId) + .75) : type === 'through' ? T.through : T.push;
+    SEGS.push({ type, t0: clock, d, from: prev, to: b });
+    if (type === 'chapter' && VO[chId]) VO_SCHEDULE.push({ id: chId, t: clock + .4 });
+    clock += d;
+  }
+  b.vo = VO[b.id] ? b.id : null;
+  if (b.vo) b.cap = VO[b.vo].text;                       // captions show exactly what is spoken
+  // A beat with no line of its own lets the previous line finish first.
+  const carry = !b.vo && prev && prev.vo ? Math.max(0, voDur(prev.vo) + .1 - prev.d) : 0;
+  // A hold never ends before its own typing, click and timed rings have played out.
+  const acts = Math.max(0, ...b.type.map(s => s.at + s.dur + .6), b.click ? b.click.at + .6 : 0, ...b.focus.map(f => f[2] < 90 ? f[2] + .2 : 0));
+  // `voSpan` beats (a click that leads into the next, joined state) keep their short length; their
+  // line carries on over the joined beat.
+  b.d = b.voSpan ? Math.max(b.d || 1.6, acts) : Math.max(b.d || autoDur(b.cap), acts, b.vo ? voDur(b.vo) + .1 + T.pad : carry + T.pad);
+  b.zin = b.join ? T.join + .2 : b.through ? .3 : T.zin;
+  b.zout = next && (next.join || (next.through && next.ch === b.ch)) ? 0 : T.zout;
+  b.t0 = clock;
+  b.c0 = b.t0 + b.zin * .6;                              // when the caption appears; rings and clicks count from here
+  b.t1 = b.c0 + b.d + b.zout;
+  if (b.vo) VO_SCHEDULE.push({ id: b.vo, t: b.c0 + .1 });
+  SEGS.push({ type: 'beat', t0: b.t0, d: b.t1 - b.t0, b });
+  clock = b.t1;
+});
+const END = clock, DUR = END + END_CARD;
+if (HAS_END && VO.end) VO_SCHEDULE.push({ id: 'end', t: END + .45 });
+
+const NAME = (CFG.titleCard && CFG.titleCard.name) || brand.name || 'Tour';
+const CHAPTERS = [{ t: 0, end: T0, title: NAME }];
+for (const s of SEGS) {
+  const ch = (s.to || s.b).ch || '', last = CHAPTERS[CHAPTERS.length - 1];
+  if (last.title === ch && CHAPTERS.length > 1) last.end = s.t0 + s.d; else CHAPTERS.push({ t: s.t0, end: s.t0 + s.d, title: ch });
+}
+CHAPTERS.push({ t: END, end: DUR, title: NAME });
+const chapterNo = {};
+CHAPTERS.slice(1, -1).forEach((c, n) => { chapterNo[c.title] = chapterNo[c.title] || n + 1; });
+
+// ── maths ────────────────────────────────────────────────────────────────────
+const clamp01 = v => Math.max(0, Math.min(1, v));
+const lerp = (a, b, p) => a + (b - a) * p;
+const easeOut = p => 1 - Math.pow(1 - p, 3);
+const easeIn = p => p * p * p;
+const easeInOut = p => p < .5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
+const easeInOutSine = p => -(Math.cos(Math.PI * p) - 1) / 2;
+const smooth = (a, b, p) => { const x = clamp01((p - a) / (b - a)); return x * x * (3 - 2 * x); };
+// A critically damped spring settle for arrivals: fast, then a soft landing.
+const SPRING_W = 8, SPRING_END = 1 - (1 + SPRING_W) * Math.exp(-SPRING_W);
+const spring = p => p >= 1 ? 1 : (1 - (1 + SPRING_W * p) * Math.exp(-SPRING_W * p)) / SPRING_END;
+const fadeWin = (t, a, b, fin = .25, fout = .25) => clamp01((t - a) / fin) * clamp01((b - t) / fout);
+
+function clampFull([cx, cy, s]) {
+  const hw = W / 2 / s, hh = H / 2 / s;
+  return [Math.min(W - hw, Math.max(hw, cx)), Math.min(H - hh, Math.max(hh, cy)), s];
+}
+// Above zoom 1 the screenshot always fills the frame; below it the window floats and recentres.
+function frameCam([cx, cy, s]) {
+  if (s >= 1) return clampFull([cx, cy, s]);
+  const k = clamp01((s - T.home) / (1 - T.home)), c1 = clampFull([cx, cy, 1]);
+  return [lerp(HOME[0], c1[0], k), lerp(HOME[1], c1[1], k), s];
+}
+const lerpCam = (a, b, p) => [lerp(a[0], b[0], p), lerp(a[1], b[1], p), Math.exp(lerp(Math.log(a[2]), Math.log(b[2]), p))];
+for (const b of BEATS) b.F = b.img === WALL ? [HOME, HOME] : (b.cam || autoCam(b)).map(c => frameCam(c));
+
+// Captions, after the cameras (an auto camera may move a caption to the top).
+const CAPTIONS = [];
+for (const b of BEATS) {
+  const end = b.t1 - b.zout * .5;
+  if (!b.cap && CAPTIONS.length) CAPTIONS[CAPTIONS.length - 1][1] = end;
+  else if (b.cap) CAPTIONS.push([b.c0, end, b.cap, b.ch || '', !!b.capTop]);
+}
+
+function beatCam(b, t) {
+  const i = BEATS.indexOf(b), prev = BEATS[i - 1];
+  const start = b.join && prev ? prev.F[1] : b.through ? b.F[0] : HOME;
+  const a = b.t0 + b.zin, z = b.t1 - b.zout;
+  let c;
+  if (t < a) c = lerpCam(start, b.F[0], easeInOutSine(clamp01((t - b.t0) / b.zin)));
+  else if (t < z) c = lerpCam(b.F[0], b.F[1], easeInOutSine(clamp01((t - a) / Math.max(.01, z - a))));
+  else c = lerpCam(b.F[1], HOME, easeInOutSine(clamp01((t - z) / Math.max(.01, b.zout))));
+  return frameCam(c);
+}
+// Where a `through` transition dives in: what the previous beat clicked, else its last focus.
+const throughPoint = b => b.click ? b.click.to : b.focus.length ? centre(b.focus[b.focus.length - 1][0]) : [W / 2, H / 2];
+const typeAt = (b, t) => b.type.map(s => ({ ...s, prog: clamp01((t - b.c0 - s.at) / s.dur) }));
+
+// ── scene ────────────────────────────────────────────────────────────────────
+// What is on screen at t: windows (image, camera, transform), rings, cursor, backdrop shift.
+function sceneAt(t) {
+  const sc = { shift: 0, windows: [], rings: [], cursor: null, wall: null, bumper: null };
+  if (!SEGS.length || t < T0 - .3) return sc;
+  const seg = t < SEGS[0].t0 ? SEGS[0] : (SEGS.find(s => t >= s.t0 && t < s.t0 + s.d) || SEGS[SEGS.length - 1]);
+  const p = clamp01((t - seg.t0) / seg.d);
+  const win = (b, cam, tr) => b.img === WALL ? (sc.wall = { b, a: tr.a ?? 1, t }) : sc.windows.push({ img: b.img, cam, tr, type: typeAt(b, t) });
+
+  if (seg.type === 'push') {
+    const e = easeInOutSine(p), D = W * T.home + 140;
+    sc.shift = -e * 160;
+    win(seg.from, HOME, { ox: -D * e });
+    win(seg.to, HOME, { ox: D * (1 - e) });
+  } else if (seg.type === 'chapter') {
+    const u = t - seg.t0;
+    const out = easeIn(clamp01(u / .38));
+    if (out < 1) win(seg.from, HOME, { m: 1 - .06 * out, oy: -30 * out, a: 1 - out });
+    const rise = easeOut(clamp01((u - (seg.d - .62)) / .62));
+    if (rise > 0) win(seg.to, HOME, { m: .92 + .08 * rise, oy: 240 * (1 - rise), a: rise });
+    sc.bumper = { title: seg.to.ch, u, d: seg.d };
+  } else if (seg.type === 'through') {
+    // The thing pressed becomes the next screen: dive towards it while the new page grows out of it.
+    const from = seg.from, to = seg.to, P = throughPoint(from), f1 = from.F[1];
+    const cam = frameCam(lerpCam(f1, [P[0], P[1], f1[2] * 2.4], easeIn(p)));
+    win(from, cam, { a: 1 - smooth(.3, .8, p) });
+    const { X, Y } = xform(cam), q = easeOut(clamp01((p - .12) / .88));
+    win(to, to.F[0], { m: lerp(.12, 1, q), ox: (X(P[0]) - W / 2) * (1 - q), oy: (Y(P[1]) - H / 2) * (1 - q), a: smooth(.12, .45, p) });
+    if (from.click) sc.cursor = { pos: P, cam, vis: 1 - smooth(0, .4, p), since: 99 };
+  } else {
+    const b = seg.b, i = BEATS.indexOf(b), prev = BEATS[i - 1];
+    const cam = beatCam(b, t);
+    let tr = {};
+    if (i === 0) { const r = easeOut(clamp01((t - T0 + .3) / .85)); tr = { m: .92 + .08 * r, oy: 220 * (1 - r), a: r }; }
+    if (b.join && t < b.t0 + T.join) {
+      win(prev, cam, {});
+      win(b, cam, { a: easeInOut(clamp01((t - b.t0) / T.join)) });
+    } else win(b, cam, tr);
+    for (const [box, a, z] of b.focus) {
+      const al = fadeWin(t, b.c0 + a, Math.min(b.t1 - b.zout, b.c0 + z), .3, .25);
+      if (al > 0) sc.rings.push({ box, cam, al });
+    }
+    // The cursor that caused a joined state stays where it clicked while the page changes.
+    if (b.join && prev && prev.click && t < b.t0 + .6) sc.cursor = { pos: prev.click.to, cam, vis: 1 - clamp01((t - b.t0) / .6), since: 99 };
+    const k = b.click;
+    if (k) {
+      const vis = fadeWin(t, b.c0, b.t1 - b.zout, .2, .15);
+      if (vis > 0) {
+        const q = easeInOut(clamp01((t - b.c0 - k.move[0]) / (k.move[1] - k.move[0])));
+        const dx = k.to[0] - k.from[0], dy = k.to[1] - k.from[1], len = Math.hypot(dx, dy) || 1;
+        const arc = Math.sin(Math.PI * q) * Math.min(60, len * .08);
+        const pos = [lerp(k.from[0], k.to[0], q) + (-dy / len) * arc, lerp(k.from[1], k.to[1], q) + (dx / len) * arc];
+        sc.cursor = { pos, cam, vis, since: t - b.c0 - k.at };
+      }
+    }
+  }
+  return sc;
+}
+
+// ── drawing ──────────────────────────────────────────────────────────────────
+const canvas = document.getElementById('screen');
+const ctx = canvas.getContext('2d');
+const img = {};
+const mk = () => { const c = document.createElement('canvas'); c.width = W; c.height = H; return c; };
+
+function roundRect(c, x, y, w, h, r) {
+  c.beginPath();
+  c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r);
+  c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath();
+}
+
+// The branded backdrop, painted once with a margin so it can drift for parallax.
+const BG = document.createElement('canvas'); BG.width = W + 400; BG.height = H;
+(function paintBackdrop() {
+  const g = BG.getContext('2d');
+  g.fillStyle = C.backdrop; g.fillRect(0, 0, BG.width, H);
+  const glow = (x, y, r, col) => { const gr = g.createRadialGradient(x, y, 0, x, y, r); gr.addColorStop(0, col); gr.addColorStop(1, rgba(C.backdrop, 0)); g.fillStyle = gr; g.fillRect(0, 0, BG.width, H); };
+  glow(420, 120, 900, rgba(C.accent, .13));
+  glow(1900, 1020, 900, rgba(C.secondary, .11));
+  g.fillStyle = rgba(C.muted, DARK ? .2 : .13);
+  for (let y = 14; y < H; y += 28) for (let x = 14; x < BG.width; x += 28) g.fillRect(x - 1.2, y - 1.2, 2.4, 2.4);
+})();
+
+const xform = (cam, tr = {}) => {
+  const [cx, cy, s] = cam, m = tr.m ?? 1, S = s * m, ox = tr.ox || 0, oy = tr.oy || 0;
+  return { S, X: x => (x - cx) * S + W / 2 + ox, Y: y => (y - cy) * S + H / 2 + oy,
+    U: sx => (sx - W / 2 - ox) / S + cx, V: sy => (sy - H / 2 - oy) / S + cy };   // screen -> screenshot
+};
+
+// A fading window with typing is drawn whole off screen, then faded as one image: faded separately,
+// the cover over not-yet-typed text would let the finished text show through (alpha compounds).
+const WINBUF = mk(), winCtx = WINBUF.getContext('2d');
+function drawWindow(c, w) {
+  const fade = w.tr.a ?? 1;
+  if (fade < 1 && w.type && w.type.length && c !== winCtx) {
+    winCtx.setTransform(1, 0, 0, 1, 0, 0); winCtx.globalAlpha = 1; winCtx.clearRect(0, 0, W, H);
+    drawWindow(winCtx, { ...w, tr: { ...w.tr, a: 1 } });
+    c.save(); c.setTransform(1, 0, 0, 1, 0, 0); c.globalAlpha = fade; c.drawImage(WINBUF, 0, 0); c.restore();
+    return;
+  }
+  const { S, X, Y } = xform(w.cam, w.tr);
+  const x0 = X(0), y0 = Y(-BAR), ww = W * S, wh = (H + BAR) * S, r = RADIUS * Math.min(1, S * 1.25);
+  if (x0 > W || x0 + ww < 0) return;
+  c.save();
+  c.globalAlpha = w.tr.a ?? 1;
+  c.shadowColor = DARK ? 'rgba(0,0,0,.5)' : 'rgba(15,23,42,.22)'; c.shadowBlur = 70; c.shadowOffsetY = 28;
+  c.fillStyle = C.surface; roundRect(c, x0, y0, ww, wh, r); c.fill();
+  c.shadowColor = 'transparent';
+  roundRect(c, x0, y0, ww, wh, r); c.clip();
+  // browser-style top bar
+  c.fillStyle = C.bar; c.fillRect(x0, y0, ww, BAR * S);
+  c.fillStyle = C.line; c.fillRect(x0, y0 + BAR * S - Math.max(1, S), ww, Math.max(1, S));
+  [['#FF5F57', 28], ['#FEBC2E', 52], ['#28C840', 76]].forEach(([col, dx]) => { c.fillStyle = col; c.beginPath(); c.arc(X(dx), Y(-BAR / 2), 7 * S, 0, Math.PI * 2); c.fill(); });
+  const pillW = 300 * S, pillH = 28 * S;
+  c.fillStyle = DARK ? C.backdrop : C.surface; roundRect(c, X(960) - pillW / 2, Y(-BAR / 2) - pillH / 2, pillW, pillH, pillH / 2); c.fill();
+  c.fillStyle = C.muted; c.font = `500 ${15 * S}px '${FONT}', sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle';
+  c.fillText(brand.windowLabel || NAME, X(960), Y(-BAR / 2) + S);
+  c.drawImage(img[w.img], X(0), Y(0), W * S, H * S);
+  // Typing: cover what is not typed yet with the field's own colour, a caret at the edge.
+  for (const s of w.type || []) {
+    let rev = Math.floor(s.prog * s.lines.reduce((a, l) => a + l[2], 0) / s.charW) * s.charW;
+    for (const [x, y, lw, lh] of s.lines) {
+      const shown = Math.max(0, Math.min(lw, rev)); rev -= lw;
+      // Padded a few pixels: anti-aliased glyph edges reach past the measured ink.
+      if (shown < lw) { c.fillStyle = s.bg; c.fillRect(X(x + shown), Y(y - 3), (lw - shown + 3) * S, (lh + 6) * S); }
+      if (s.prog > 0 && s.prog < 1 && shown > 0 && shown < lw) { c.fillStyle = C.ink; c.fillRect(X(x + shown) + S, Y(y + lh * .12), 2 * S, lh * .76 * S); }
+    }
+  }
+  c.restore();
+  c.save();
+  c.globalAlpha = (w.tr.a ?? 1) * .9;
+  c.strokeStyle = DARK ? 'rgba(255,255,255,.08)' : 'rgba(15,23,42,.10)'; c.lineWidth = 1;
+  roundRect(c, x0 + .5, y0 + .5, ww - 1, wh - 1, r); c.stroke();
+  c.restore();
+}
+
+// The "and more" wall: tiles of real screens springing in, a slow drift.
+function drawWall(c, wl) {
+  const b = wl.b, t = wl.t, tiles = CFG.tiles || [];
+  c.save();
+  c.globalAlpha = wl.a;
+  const cols = 3, tw = 480, th = 270, gap = 24, x0 = (W - (cols * tw + (cols - 1) * gap)) / 2, y0 = 34;
+  const drift = 1 + clamp01((t - b.t0) / (b.t1 - b.t0)) * .025;
+  c.translate(W / 2, H / 2 - 40); c.scale(drift, drift); c.translate(-W / 2, -(H / 2 - 40));
+  tiles.slice(0, 9).forEach((tile, i) => {
+    const p = spring(clamp01((t - b.t0 - .05 - i * .07) / .6));
+    if (p <= 0) return;
+    const x = x0 + (i % cols) * (tw + gap), y = y0 + Math.floor(i / cols) * (th + gap), sc = .9 + .1 * p;
+    c.save();
+    c.globalAlpha = wl.a * clamp01(p * 1.4);
+    c.translate(x + tw / 2, y + th / 2 + (1 - p) * 40); c.scale(sc, sc); c.translate(-tw / 2, -th / 2);
+    c.shadowColor = DARK ? 'rgba(0,0,0,.45)' : 'rgba(15,23,42,.16)'; c.shadowBlur = 30; c.shadowOffsetY = 10;
+    c.fillStyle = C.surface; roundRect(c, 0, 0, tw, th, 14); c.fill();
+    c.shadowColor = 'transparent';
+    c.save(); roundRect(c, 0, 0, tw, th, 14); c.clip();
+    const sy = tile.crop || 0, sh = H - sy, sw = sh * 16 / 9;
+    c.drawImage(img[tile.img], 0, sy, sw, sh, 0, 0, tw, th);
+    c.restore();
+    c.strokeStyle = C.line; c.lineWidth = 1.5; roundRect(c, 0, 0, tw, th, 14); c.stroke();
+    c.font = `600 22px '${FONT}', sans-serif`;
+    const lw = c.measureText(tile.label).width + 52;
+    c.fillStyle = rgba(C.surface, .97); c.shadowColor = 'rgba(0,0,0,.18)'; c.shadowBlur = 14; c.shadowOffsetY = 4;
+    roundRect(c, 14, th - 58, lw, 44, 22); c.fill();
+    c.shadowColor = 'transparent';
+    c.fillStyle = C.accent; c.beginPath(); c.arc(36, th - 36, 5, 0, Math.PI * 2); c.fill();
+    c.fillStyle = C.ink; c.textAlign = 'left'; c.textBaseline = 'middle'; c.fillText(tile.label, 50, th - 35);
+    c.restore();
+  });
+  c.restore();
+}
+
+const ARROW = new Path2D('M1 1 L1 24 L6.6 18.6 L10.6 27.4 L14.4 25.7 L10.5 17 L18 17 Z');
+function drawScene(c, t) {
+  const sc = sceneAt(t);
+  c.setTransform(1, 0, 0, 1, 0, 0);
+  c.globalAlpha = 1;
+  c.drawImage(BG, -200 + sc.shift, 0);
+  for (const w of sc.windows) drawWindow(c, w);
+  if (sc.wall) drawWall(c, sc.wall);
+  for (const r of sc.rings) {
+    const { S, X, Y } = xform(r.cam);
+    const [x, y, w, h] = r.box, pad = (1 - r.al) * 10;
+    c.save();
+    c.globalAlpha = r.al;
+    c.shadowColor = rgba(C.accent, .55); c.shadowBlur = 20;
+    c.strokeStyle = C.accent; c.lineWidth = 3.5;
+    roundRect(c, X(x - 4) - pad, Y(y - 4) - pad, (w + 8) * S + pad * 2, (h + 8) * S + pad * 2, 10);
+    c.stroke();
+    c.restore();
+  }
+  if (sc.cursor) {
+    const { X, Y } = xform(sc.cursor.cam);
+    const sx = X(sc.cursor.pos[0]), sy = Y(sc.cursor.pos[1]), s = sc.cursor.since;
+    if (s >= 0 && s < .55) {
+      const q = s / .55;
+      c.save(); c.globalAlpha = (1 - q) * .9 * sc.cursor.vis;
+      c.strokeStyle = C.accent; c.lineWidth = 4; c.fillStyle = rgba(C.accent, .16);
+      c.beginPath(); c.arc(sx, sy, 9 + easeOut(q) * 34, 0, Math.PI * 2); c.fill(); c.stroke(); c.restore();
+    }
+    const press = s >= 0 && s < .16 ? 1 - .14 * Math.sin(Math.PI * s / .16) : 1;
+    c.save();
+    c.globalAlpha = sc.cursor.vis;
+    c.translate(sx - 2, sy - 2); c.scale(1.5 * press, 1.5 * press);
+    c.shadowColor = 'rgba(15,23,42,.35)'; c.shadowBlur = 10; c.shadowOffsetY = 4;
+    c.fillStyle = '#0F172A'; c.fill(ARROW);
+    c.shadowColor = 'transparent';
+    c.strokeStyle = '#FFFFFF'; c.lineWidth = 1.6; c.lineJoin = 'round'; c.stroke(ARROW);
+    c.restore();
+  }
+  return sc;
+}
+
+// How far the visible picture moves on screen between two times: the content under a grid of
+// screen points, and the cursor. Parts of a zoomed window that are off screen do not count.
+const GRID = [0, 480, 960, 1440, 1920].flatMap(x => [0, 270, 540, 810, 1080].map(y => [x, y]));
+function motionBetween(ta, tb) {
+  const A = sceneAt(ta), B = sceneAt(tb);
+  let d = 0;
+  A.windows.forEach((wa, i) => {
+    const wb = B.windows[i];
+    if (!wb || wb.img !== wa.img) return;
+    const a = xform(wa.cam, wa.tr), b = xform(wb.cam, wb.tr);
+    for (const [sx, sy] of GRID) {
+      const u = a.U(sx), v = a.V(sy);
+      if (u >= 0 && u <= W && v >= -BAR && v <= H) d = Math.max(d, Math.hypot(b.X(u) - sx, b.Y(v) - sy));
+    }
+  });
+  if (A.cursor && B.cursor) {
+    const a = xform(A.cursor.cam), b = xform(B.cursor.cam);
+    d = Math.max(d, Math.hypot(b.X(B.cursor.pos[0]) - a.X(A.cursor.pos[0]), b.Y(B.cursor.pos[1]) - a.Y(A.cursor.pos[1])));
+  }
+  return d;
+}
+// Motion blur for the exported video: average sub-frames across the shutter whenever something
+// on screen moves more than a few pixels in one frame. Holds cost one draw.
+function blurSamples(t) {
+  const d = motionBetween(t - 1 / 60, t + 1 / 60);
+  const streak = d * T.shutter;                 // how far things smear within one exposure
+  return streak < 2 ? 1 : Math.min(10, Math.ceil(streak / 2.5) + 1);
+}
+const ACC = mk(), TMP = mk(), accCtx = ACC.getContext('2d'), tmpCtx = TMP.getContext('2d');
+function ringsAt(t) {
+  return sceneAt(t).rings.map(r => { const { S, X, Y } = xform(r.cam); return { x: X(r.box[0]), y: Y(r.box[1]), w: r.box[2] * S, h: r.box[3] * S, al: r.al }; });
+}
+
+// ── DOM layers ───────────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+const capEl = $('caption'), capArea = capEl.querySelector('.area'), capText = capEl.querySelector('.text');
+const bumper = $('bumper'), [bNum, bTitle, bSub] = bumper.children;
+const titleCard = $('title-card'), endCard = $('end-card');
+if ((CFG.captions || {}).area === false) capEl.classList.add('no-area');
+if (new URLSearchParams(location.search).has('nocaptions')) capEl.hidden = true;   // captions delivered as captions.srt instead
+$('frame').setAttribute('aria-label', CFG.title || NAME);
+for (const card of [titleCard, endCard]) {
+  const logo = card.querySelector('.logo');
+  if (brand.logo) { logo.src = brand.logo; logo.alt = brand.logoAlt || NAME; } else logo.remove();
+}
+if (HAS_TITLE) { titleCard.querySelector('.name').textContent = CFG.titleCard.name || NAME; titleCard.querySelector('.line').textContent = CFG.titleCard.line || ''; }
+if (HAS_END) {
+  const e = CFG.endCard, tag = endCard.querySelector('.tag');
+  tag.textContent = e.tag || '';
+  if (e.tagEm) { tag.appendChild(document.createElement('br')); const em = document.createElement('em'); em.textContent = e.tagEm; tag.appendChild(em); }
+  const recap = e.recap || CHAPTERS.slice(1, -1).map(c => c.title).filter((x, n, a) => x && a.indexOf(x) === n);
+  for (const r of recap) { const li = document.createElement('li'); li.textContent = r; endCard.querySelector('.recap').appendChild(li); }
+  endCard.querySelector('.link').textContent = e.link || '';
+  endCard.querySelector('.credits').textContent = e.credits || '';
+}
+const titleParts = [...titleCard.children], endParts = [...endCard.children];
+$('scrub').setAttribute('aria-valuemax', String(DUR));
+const progressEl = $('progress');
+if (CFG.progress === false) progressEl.remove();
+else CHAPTERS.forEach(ch => { const s = document.createElement('span'); s.style.flex = String(ch.end - ch.t); s.appendChild(document.createElement('i')); progressEl.appendChild(s); });
+const setIn = (el, p, rise = 24) => { el.style.opacity = p; el.style.transform = `translateY(${(1 - p) * rise}px)`; };
+
+function updateDom(t, sc) {
+  // Caption: area label first, then the line, each fading up; out quickly.
+  const cap = CAPTIONS.find(([a, z]) => t >= a && t <= z);
+  if (cap) {
+    const [a, z, text, ch, top] = cap;
+    capArea.textContent = ch; capText.textContent = text;
+    const box = easeOut(clamp01((t - a) / .35)), out = clamp01((z - t) / .2);
+    capEl.style.opacity = Math.min(box, out);
+    capEl.style.top = top ? '52px' : 'auto';
+    capEl.style.bottom = top ? 'auto' : '52px';
+    capEl.style.transform = `translateX(-50%) translateY(${(1 - box) * (top ? -18 : 18)}px)`;
+    setIn(capArea, easeOut(clamp01((t - a - .05) / .3)), 10);
+    setIn(capText, easeOut(clamp01((t - a - .12) / .35)), 14);
+  } else capEl.style.opacity = 0;
+
+  // Chapter bumper: number, title, line, staggered; then out before the window rises.
+  if (sc.bumper) {
+    const u = sc.bumper.u, out = 1 - easeIn(clamp01((u - (sc.bumper.d - .7)) / .3));
+    bNum.textContent = String(chapterNo[sc.bumper.title] || '').padStart(2, '0');
+    bTitle.textContent = sc.bumper.title;
+    bSub.textContent = chapterInfo(sc.bumper.title).sub || '';
+    [bNum, bTitle, bSub].forEach((el, n) => {
+      const p = easeOut(clamp01((u - .22 - n * .08) / .42));
+      el.style.opacity = Math.min(p, out);
+      el.style.transform = `translateY(${(1 - p) * 26 - (1 - out) * 16}px)`;
+    });
+  } else [bNum, bTitle, bSub].forEach(el => { el.style.opacity = 0; });
+
+  if (HAS_TITLE) {
+    const tOut = easeIn(clamp01((t - (T0 - .25)) / .55));
+    titleCard.style.opacity = 1 - tOut;
+    titleCard.style.transform = `scale(${1 + tOut * .06})`;
+    titleParts.forEach((el, n) => setIn(el, easeOut(clamp01((t - .15 - n * .25) / .75)), [16, 34, 20][n] || 20));
+  }
+  const endIn = easeOut(clamp01((t - END) / .6));
+  endCard.style.opacity = HAS_END ? endIn : 0;
+  if (HAS_END) {
+    const [, tag, recap, link, credits] = endCard.querySelector('.logo') ? endParts : [null, ...endParts];
+    const logo = endCard.querySelector('.logo');
+    if (logo) setIn(logo, easeOut(clamp01((t - END - .1) / .6)), 14);
+    setIn(tag, easeOut(clamp01((t - END - .25) / .7)), 30);
+    [...recap.children].forEach((li, n) => setIn(li, easeOut(clamp01((t - END - .8 - n * .06) / .45)), 16));
+    setIn(link, easeOut(clamp01((t - END - 1.6) / .5)), 12);
+    credits.style.opacity = easeOut(clamp01((t - END - 1.2) / .6));
+  } else canvas.style.opacity = 1 - endIn;   // no end card: fade to the backdrop
+  if (progressEl.isConnected) [...progressEl.children].forEach((s, n) => { const ch = CHAPTERS[n]; s.firstChild.style.width = `${clamp01((t - ch.t) / (ch.end - ch.t)) * 100}%`; });
+}
+
+const PARAMS = new URLSearchParams(location.search);
+const RENDER = PARAMS.has('render'), BLUR = RENDER && !PARAMS.has('noblur');
+function renderAt(t) {
+  t = Math.max(0, Math.min(DUR, t));
+  const k = BLUR ? blurSamples(t) : 1;
+  let sc;
+  if (k <= 1) sc = drawScene(ctx, t);
+  else {
+    const span = T.shutter / 30;
+    for (let j = 0; j < k; j++) {
+      const s = drawScene(tmpCtx, t + (j / (k - 1) - .5) * span);
+      if (j === Math.floor(k / 2)) sc = s;
+      accCtx.globalAlpha = 1 / (j + 1);
+      accCtx.drawImage(TMP, 0, 0);
+    }
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1;
+    ctx.drawImage(ACC, 0, 0);
+  }
+  updateDom(t, sc || sceneAt(t));
+  return k;
+}
+
+// ── loading ──────────────────────────────────────────────────────────────────
+const IMAGES = [...new Set([...BEATS.map(b => b.img).filter(n => n && n !== WALL), ...(CFG.tiles || []).map(x => x.img)])];
+const ready = (PROBLEMS.length ? Promise.reject(new Error(PROBLEMS.join('; '))) : Promise.resolve()).then(() => Promise.all([
+  ...IMAGES.map(n => new Promise((res, rej) => { const im = new Image(); im.onload = () => { img[n] = im; res(); }; im.onerror = () => rej(new Error(`missing img/${n}.png`)); im.src = `img/${n}.png`; })),
+  ...[...document.images].map(im => im.decode().catch(() => {})),
+  document.fonts.ready,
+])).then(() => Promise.all(['600 38px', '800 168px', '600 22px', '500 15px', '700 26px'].map(f => document.fonts.load(`${f} '${FONT}'`)))).then(() => true);
+window.renderAt = renderAt;
+window.TOUR_DURATION = DUR;
+window.VO_SCHEDULE = VO_SCHEDULE;
+window.walkthroughReady = ready;
+// For scripts (render, mix, export, verify): the computed plan and the scene maths.
+window.__tour = { DUR, T0, END, END_CARD, T, BEATS, SEGS, CAPTIONS, CHAPTERS, VO_SCHEDULE, PROBLEMS, HAS_END, endCredits: HAS_END ? CFG.endCard.credits || '' : '',
+  sceneAt, ringsAt, motionBetween, voText: id => VO[id] && VO[id].text, shots: SHOTS };
+
+// ── player ───────────────────────────────────────────────────────────────────
+const frame = $('frame'), stage = $('stage');
+if (RENDER) document.body.classList.add('render');
+function fit() {
+  if (RENDER) { frame.style.width = `${W}px`; frame.style.height = `${H}px`; stage.style.transform = 'none'; return; }
+  const availW = Math.max(240, document.documentElement.clientWidth - 32);
+  const availH = Math.max(160, window.innerHeight - 140);
+  const s = Math.min(availW / W, availH / H);
+  frame.style.width = `${W * s}px`; frame.style.height = `${H * s}px`;
+  stage.style.transform = `scale(${s})`;
+  rootStyle.setProperty('--frame-w', `${W * s}px`);
+}
+window.addEventListener('resize', fit); fit();
+
+let t = Number(PARAMS.get('t') || 1.9), playing = false, started = PARAMS.has('t'), last = 0;
+const playBtn = $('play'), overlay = $('play-overlay'), scrub = $('scrub'), timeEl = $('time'), chapEl = $('chapters');
+overlay.hidden = started;
+const fmt = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+CHAPTERS.forEach((ch, n) => {
+  const seg = document.createElement('div'); seg.className = 'seg'; seg.style.setProperty('--len', ch.end - ch.t);
+  seg.appendChild(document.createElement('i')); scrub.appendChild(seg);
+  if (n === 0 || n === CHAPTERS.length - 1 || !ch.title) return;
+  const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'chap'; btn.textContent = ch.title; btn.dataset.i = n;
+  btn.addEventListener('click', () => { seek(ch.t + .01); setPlaying(true); });
+  chapEl.appendChild(btn);
+});
+function sync() {
+  renderAt(t);
+  timeEl.textContent = `${fmt(t)} / ${fmt(DUR)}`;
+  scrub.setAttribute('aria-valuenow', t.toFixed(1));
+  [...scrub.children].forEach((seg, n) => { const ch = CHAPTERS[n]; seg.firstChild.style.width = `${clamp01((t - ch.t) / (ch.end - ch.t)) * 100}%`; });
+  const cur = CHAPTERS.filter(c => c.t <= t).pop();
+  [...chapEl.children].forEach(btn => btn.setAttribute('aria-current', CHAPTERS[+btn.dataset.i] === cur ? 'true' : 'false'));
+}
+// The soundtrack follows the playhead: set on seek and play, nudged back if it drifts.
+const audio = $('narration');
+if (!RENDER) {
+  audio.src = CFG.audio || 'vo/mix.m4a';
+  audio.addEventListener('error', () => { if (!CFG.audio && !audio.src.endsWith('narration.m4a')) audio.src = 'vo/narration.m4a'; }, { once: true });
+}
+const syncAudio = () => { try { audio.currentTime = t; } catch (e) { /* not loaded yet */ } };
+function seek(v) { t = Math.max(0, Math.min(DUR, v)); started = true; overlay.hidden = true; syncAudio(); sync(); }
+function setPlaying(v) {
+  if (v && t >= DUR) t = 0;
+  if (v && !started) { t = 0; started = true; }
+  playing = v; overlay.hidden = playing || started;
+  playBtn.textContent = playing ? 'Pause' : (t >= DUR ? 'Replay' : 'Play');
+  playBtn.setAttribute('aria-label', playBtn.textContent);
+  last = performance.now();
+  if (playing) { syncAudio(); audio.play().catch(() => {}); requestAnimationFrame(tick); } else audio.pause();
+}
+function tick(now) {
+  if (!playing) return;
+  t += (now - last) / 1000; last = now;
+  if (!audio.paused && Math.abs(audio.currentTime - t) > .25) syncAudio();
+  if (t >= DUR) { t = DUR; sync(); setPlaying(false); return; }
+  sync(); requestAnimationFrame(tick);
+}
+playBtn.addEventListener('click', () => setPlaying(!playing));
+overlay.addEventListener('click', () => setPlaying(true));
+function scrubTo(e) { const r = scrub.getBoundingClientRect(); seek(clamp01((e.clientX - r.left) / r.width) * DUR); }
+scrub.addEventListener('pointerdown', e => { scrub.setPointerCapture(e.pointerId); scrubTo(e); });
+scrub.addEventListener('pointermove', e => { if (e.buttons) scrubTo(e); });
+scrub.addEventListener('keydown', e => { if (e.key === 'ArrowRight') seek(t + 5); if (e.key === 'ArrowLeft') seek(t - 5); });
+document.addEventListener('keydown', e => {
+  if (e.target.closest && e.target.closest('button')) return;
+  if (e.code === 'Space') { e.preventDefault(); setPlaying(!playing); }
+});
+window.walkthroughReady.then(() => { if (!RENDER) sync(); }).catch(err => { timeEl.textContent = err.message; console.error(err.message); });
+</script>
+</body>
+</html>
